@@ -19,7 +19,7 @@ import { detectConflicts, advanceConflictQueue, playConflictAlert, CONFLICT_STAT
 import { createCVOutput, mergeCVIntoTrafficState } from '../services/cvService'
 import { initMqtt } from '../services/mqttService'
 import { createTelemetryUpdate } from '../services/telemetryService'
-import { sendSignalCommandToSUMO, syncTrafficStateFromSUMO } from './sumoAdapter'
+import { sendSignalCommandToSUMO, syncTrafficStateFromSUMO, sumoAdapter, SIMULATION_MODES, getSimulationMode } from './sumoAdapter'
 
 class SimulationEngine {
   constructor() {
@@ -59,8 +59,22 @@ class SimulationEngine {
     }
 
     this._spawnRandomVehicles(40)
+
+    const isSumoAvailable = await sumoAdapter.checkAvailability()
+    if (isSumoAvailable) {
+      this.log('SYSTEM', 'SUMO_CONNECTED')
+      sumoAdapter.connectWs((sumoState) => {
+        this._syncSumoState(sumoState)
+      })
+    }
+
     this.log('SYSTEM', 'Simulation initialized')
     this._notify()
+  }
+
+  _syncSumoState(sumoState) {
+    // Process real-time updates from SUMO TraCI if available
+    // Currently relying on syncTrafficStateFromSUMO during ticks for state
   }
 
   _createRawTrafficState(intersectionId) {
@@ -76,9 +90,17 @@ class SimulationEngine {
     }
   }
 
-  start() {
+  async start() {
     if (this.running) return
     this.running = true
+
+    if (sumoAdapter.sumoAvailable) {
+      const started = await sumoAdapter.start()
+      if (started) {
+        this.log('SYSTEM', 'SUMO_STARTED')
+      }
+    }
+
     const tickMs = Math.max(50, 1000 / this.speed)
     this.tickInterval = setInterval(() => this.tick(1), tickMs)
     this.log('SYSTEM', `Simulation started (${this.speed}x)`)
@@ -89,6 +111,12 @@ class SimulationEngine {
     this.running = false
     if (this.tickInterval) clearInterval(this.tickInterval)
     this.tickInterval = null
+    
+    if (sumoAdapter.mode === SIMULATION_MODES.SUMO) {
+      sumoAdapter.stop()
+      this.log('SYSTEM', 'SUMO_STOPPED')
+    }
+
     this.log('SYSTEM', 'Simulation paused')
     this._notify()
   }
@@ -122,6 +150,11 @@ class SimulationEngine {
 
   async tick(dt = 1) {
     this.simTime += dt
+
+    if (sumoAdapter.mode === SIMULATION_MODES.SUMO) {
+      // Fire and forget TraCI step
+      sumoAdapter.step().catch(() => this.log('ERROR', 'TRACI_ERROR'))
+    }
 
     this._tickSignals(dt)
     this._tickTraffic(dt)
@@ -192,12 +225,12 @@ class SimulationEngine {
     }
   }
 
-  async spawnAmbulance({ origin = 'INT_1', destination = 'INT_4', priority = 'HIGH', speed = 48 } = {}) {
+  async spawnAmbulance({ id, origin = 'INT_1', destination = 'INT_4', priority = 'HIGH', speed = 48 } = {}) {
     const originInt = this.intersections.find((i) => i.id === origin)
     const destInt = this.intersections.find((i) => i.id === destination)
     if (!originInt || !destInt) return null
 
-    const id = `AMB_${Date.now()}`
+    const ambId = id || `AMB_${Date.now()}`
     
     this.log('ROUTING', `Fetching candidate routes: ${origin} → ${destination}`)
     const routeData = await planRoute(originInt.coordinates, destInt.coordinates, this.intersections, this.trafficStates, this.signalStates, speed)
@@ -207,7 +240,7 @@ class SimulationEngine {
     const routeTotalDistance = bestRoute.distanceMeters || polylineLength(bestRoute.coordinates)
 
     const ambulance = {
-      id,
+      id: ambId,
       vehicleType: 'ambulance',
       location: { lat: originInt.coordinates.lat, lng: originInt.coordinates.lng },
       speed,
@@ -240,19 +273,17 @@ class SimulationEngine {
       isReal: false
     }
 
-    this.ambulances[id] = ambulance
-    setAmbulance(id, ambulance)
+    this.ambulances[ambId] = ambulance
+    setAmbulance(ambId, ambulance)
 
-    this.log('AMBULANCE', `Spawned ${id}: Selected route with ETA ${Math.round(ambulance.eta)}s`)
-    addEmergencyEvent({
-      ambulanceId: id,
-      intersectionId: origin,
-      eventType: 'SPAWNED',
-      priorityScore: 0,
-      eta: ambulance.eta,
-      decision: 'SPAWN',
-      reason: `Spawned ${id}`,
-    })
+    this.log('AMBULANCE', `Spawned ${ambId}: Selected route with ETA ${Math.round(ambulance.eta)}s`)
+    
+    // Log the flow required by the Command Center sync
+    addEmergencyEvent({ ambulanceId: ambId, intersectionId: origin, eventType: 'EMERGENCY_STARTED', priorityScore: 0, eta: ambulance.eta, decision: 'START', reason: `Driver initiated emergency` })
+    addEmergencyEvent({ ambulanceId: ambId, intersectionId: destination, eventType: 'DESTINATION_SELECTED', priorityScore: 0, eta: ambulance.eta, decision: 'DEST', reason: `Hospital destination selected` })
+    addEmergencyEvent({ ambulanceId: ambId, intersectionId: origin, eventType: 'ROUTES_GENERATED', priorityScore: 0, eta: ambulance.eta, decision: 'ROUTE_GEN', reason: `Generated ${routeData.candidates.length} candidate routes` })
+    addEmergencyEvent({ ambulanceId: ambId, intersectionId: origin, eventType: 'ROUTE_SELECTED', priorityScore: 0, eta: ambulance.eta, decision: 'ROUTE_SEL', reason: `Fastest feasible route selected` })
+    addEmergencyEvent({ ambulanceId: ambId, intersectionId: corridor.intersectionIds[0] || origin, eventType: 'CORRIDOR_CREATED', priorityScore: 0, eta: ambulance.eta, decision: 'CORRIDOR', reason: `Green corridor mapped for route` })
 
     this._notify()
     return ambulance
@@ -363,7 +394,7 @@ class SimulationEngine {
       addEmergencyEvent({
         ambulanceId: amb.id,
         intersectionId: amb.destination,
-        eventType: 'ARRIVED',
+        eventType: 'EMERGENCY_COMPLETED',
         priorityScore: 0,
         eta: 0,
         decision: 'COMPLETE',
@@ -512,6 +543,7 @@ class SimulationEngine {
       speed: this.speed,
       trafficMultiplier: this.trafficMultiplier,
       simTime: this.simTime,
+      simulationBackend: getSimulationMode() === SIMULATION_MODES.SUMO ? 'SUMO' : 'BROWSER',
       intersections: this.intersections,
       signalStates: { ...this.signalStates },
       trafficStates: { ...this.trafficStates },

@@ -1,0 +1,4 @@
+<routes>
+    <vType id="car" accel="0.8" decel="4.5" sigma="0.5" length="5" maxSpeed="15"/>
+    <vType id="AMBULANCE" accel="1.5" decel="6.0" sigma="0" length="6" maxSpeed="30" vClass="emergency" guiShape="emergency"/>
+</routes>

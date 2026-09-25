@@ -75,8 +75,8 @@ export default function Intersections() {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-sm)', paddingTop: 'var(--space-xs)', borderTop: '1px solid var(--clr-border)' }}>
                   <div style={{ display: 'flex', gap: 12, fontSize: '0.72rem', color: 'var(--clr-text-muted)' }}>
-                    <span><Camera size={12} style={{ verticalAlign: 'middle', color: 'var(--clr-success)' }} /> Cam 4K</span>
-                    <span><Wifi size={12} style={{ verticalAlign: 'middle', color: 'var(--clr-primary)' }} /> MQTT 1883</span>
+                    <span><Camera size={12} style={{ verticalAlign: 'middle', color: 'var(--clr-warning)' }} /> SIMULATED</span>
+                    <span><Wifi size={12} style={{ verticalAlign: 'middle', color: 'var(--clr-text-muted)' }} /> DISCONNECTED</span>
                   </div>
                   <Link to={`/intersections/${int.id}`} className="btn btn-outline btn-sm">
                     Inspect <ArrowRight size={12} />

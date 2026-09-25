@@ -86,6 +86,12 @@ export function computeEnhancedTrafficState(rawTrafficState, signalState) {
     detectedAmbulances: rawTrafficState.detectedAmbulances || [],
     timestamp: new Date().toISOString(),
     source: 'SIMULATION',
+    // Preserve for UI:
+    queueLengthByLane: rawTrafficState.queueLengthByLane || {},
+    occupancyByLane: rawTrafficState.occupancyByLane || {},
+    densityByLane: rawTrafficState.densityByLane || {},
+    averageSpeedByLane: rawTrafficState.averageSpeedByLane || {},
+    vehicleCountsByLane: rawTrafficState.vehicleCountsByLane || {},
   }
 }
 

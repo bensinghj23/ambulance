@@ -13,7 +13,8 @@ export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState('TRAFFIC_OPERATOR')
+  const [role, setRole] = useState('COMMAND_CENTER')
+  const [ambulanceId, setAmbulanceId] = useState('AMB-001')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -22,8 +23,9 @@ export default function Register() {
     setError('')
     setLoading(true)
     try {
-      await register(email, password, name, role)
-      navigate('/dashboard')
+      const finalAmbulanceId = role === 'AMBULANCE_DRIVER' ? ambulanceId : null
+      await register(email, password, name, role, finalAmbulanceId)
+      navigate('/')
     } catch (err) {
       setError(err.message || 'Registration failed')
     } finally {
@@ -36,7 +38,7 @@ export default function Register() {
       <div className="card" style={{ width: '100%', maxWidth: 440, padding: 'var(--space-2xl)' }}>
         <div style={{ textAlign: 'center', marginBottom: 'var(--space-xl)' }}>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--clr-text-heading)' }}>
-            Register Operator Account
+            Register Account (Demo Role Assignment)
           </h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--clr-text-muted)' }}>
             Smart City Emergency Operations Center Access
@@ -68,12 +70,25 @@ export default function Register() {
           <div className="form-group">
             <label className="form-label">Assign Role</label>
             <select className="form-select" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="TRAFFIC_OPERATOR">TRAFFIC_OPERATOR</option>
-              <option value="ANALYST">ANALYST</option>
-              <option value="ADMIN">ADMIN</option>
-              <option value="VIEWER">VIEWER</option>
+              <option value="AMBULANCE_DRIVER">Ambulance Driver</option>
+              <option value="COMMAND_CENTER">Command Center</option>
+              <option value="ANALYST">Analyst</option>
+              <option value="ADMIN">Administrator</option>
+              <option value="VIEWER">Viewer</option>
             </select>
           </div>
+
+          {role === 'AMBULANCE_DRIVER' && (
+            <div className="form-group">
+              <label className="form-label">Ambulance Assignment</label>
+              <select className="form-select" value={ambulanceId} onChange={(e) => setAmbulanceId(e.target.value)}>
+                <option value="AMB-001">AMB-001</option>
+                <option value="AMB-002">AMB-002</option>
+                <option value="AMB-003">AMB-003</option>
+                <option value="AMB-004">AMB-004</option>
+              </select>
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary" style={{ marginTop: 'var(--space-sm)', width: '100%' }} disabled={loading}>
             {loading ? 'Creating Account...' : 'Create Account'} <ArrowRight size={16} />

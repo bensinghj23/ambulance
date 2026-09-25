@@ -154,7 +154,7 @@ export default function Topbar() {
                 {currentUser?.name || 'Operator'}
               </div>
               <div style={{ fontSize: '0.65rem', color: 'var(--clr-text-muted)' }}>
-                {currentUser?.role || 'TRAFFIC_OPERATOR'}
+                {currentUser?.role || 'COMMAND_CENTER'}
               </div>
             </div>
             <ChevronDown size={14} style={{ color: 'var(--clr-text-muted)' }} />

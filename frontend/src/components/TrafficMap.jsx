@@ -31,10 +31,10 @@ export default function TrafficMap({ height = '500px' }) {
       attributionControl: false,
     })
 
-    // Clean light basemap — OpenStreetMap compatible via Carto
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // Clean light basemap — OpenStreetMap compatible
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     }).addTo(map)
 
     mapInstanceRef.current = map

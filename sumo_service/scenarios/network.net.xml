@@ -1,0 +1,4 @@
+<net version="1.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+    <edge id="e1" from="n1" to="n2" numLanes="2" speed="13.89"/>
+    <edge id="e2" from="n2" to="n3" numLanes="2" speed="13.89"/>
+</net>

@@ -10,12 +10,12 @@ export default function Profile() {
 
   const permissionsMatrix = {
     ADMIN: ['System Configuration', 'User Management', 'Manual Signal Override', 'View Analytics', 'Emergency Priority Controls'],
-    TRAFFIC_OPERATOR: ['Manual Signal Override', 'View Analytics', 'Emergency Priority Controls', 'Simulation Control'],
+    COMMAND_CENTER: ['Manual Signal Override', 'View Analytics', 'Emergency Priority Controls', 'Simulation Control'],
     ANALYST: ['View Analytics', 'Export Metrics', 'View Event Audit Logs'],
     VIEWER: ['Read-only Dashboard', 'Live Map Monitoring'],
   }
 
-  const role = currentUser?.role || 'TRAFFIC_OPERATOR'
+  const role = currentUser?.role || 'COMMAND_CENTER'
   const userPermissions = permissionsMatrix[role] || []
 
   return (
@@ -34,7 +34,7 @@ export default function Profile() {
         <div className="card">
           <div className="card-header">
             <div className="card-title">
-              <User size={18} style={{ color: 'var(--clr-primary)' }} /> Operator Account Details
+              <User size={18} style={{ color: 'var(--clr-primary)' }} /> User Account Details
             </div>
           </div>
 
