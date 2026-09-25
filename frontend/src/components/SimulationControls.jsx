@@ -97,11 +97,56 @@ export default function SimulationControls({ compact = false }) {
 
       {!compact && (
         <>
+          {/* Demo Controls */}
+          <div style={{
+            borderTop: '1px solid var(--clr-border)',
+            paddingTop: 'var(--space-md)',
+            marginTop: 'var(--space-md)',
+          }}>
+            <div style={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              color: 'var(--clr-text-dim)',
+              marginBottom: 'var(--space-sm)',
+            }}>
+              🎮 Demo Scenarios
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-sm)', marginBottom: 'var(--space-sm)' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => sim.setTrafficMultiplier(Math.max(0.1, (sim.trafficMultiplier || 1) - 0.2))}
+              >
+                📉 Decrease Traffic
+              </button>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => sim.setTrafficMultiplier(Math.min(3.0, (sim.trafficMultiplier || 1) + 0.5))}
+              >
+                📈 Increase Traffic
+              </button>
+            </div>
+            
+            <button 
+              className="btn btn-outline" 
+              style={{ width: '100%', marginBottom: 'var(--space-md)', borderColor: '#F59E0B', color: '#F59E0B' }}
+              onClick={() => {
+                // Trigger conflict: spawn 2 ambulances heading to same destination
+                sim.spawnAmbulance({ origin: 'INT_1', destination: 'INT_4', priority: 'HIGH', speed: 45 })
+                setTimeout(() => {
+                  sim.spawnAmbulance({ origin: 'INT_3', destination: 'INT_4', priority: 'CRITICAL', speed: 50 })
+                }, 500)
+              }}
+            >
+              ⚠️ Trigger Conflict
+            </button>
+          </div>
+
           {/* Ambulance spawn */}
           <div style={{
             borderTop: '1px solid var(--clr-border)',
             paddingTop: 'var(--space-md)',
-            marginTop: 'var(--space-sm)',
           }}>
             <div style={{
               fontSize: '0.75rem',
