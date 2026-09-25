@@ -2,6 +2,10 @@
    Simulation Engine — Browser-based traffic simulation
    Manages the simulation loop, vehicle spawning, ambulance
    movement, signal control, and metric collection.
+
+   UPGRADED: Uses OSRM routes + geometry-based ambulance
+   movement. Falls back to intersection graph when OSRM
+   is unavailable.
    ============================================================ */
 import { v4 as uuidv4 } from 'uuid'
 import {
@@ -31,6 +35,18 @@ import {
   updateSignalState,
   addEmergencyEvent,
 } from '../services/firestore'
+import {
+  fetchRouteWithFallback,
+  interpolateAlongRoute,
+  polylineLength,
+  haversineDistance,
+} from '../services/mapService'
+import {
+  buildEmergencyCorridor,
+  headingToApproach,
+  findNextIntersection,
+  distanceToIntersection,
+} from '../services/intersectionService'
 
 class SimulationEngine {
   constructor() {
@@ -210,36 +226,77 @@ class SimulationEngine {
     }
   }
 
-  /* ── Ambulance Management ───────────────────── */
-  spawnAmbulance({
+  /* ── Ambulance Management (UPGRADED) ─────────── */
+  async spawnAmbulance({
     origin = 'INT_1',
     destination = 'INT_4',
     priority = 'HIGH',
     speed = 48,
   } = {}) {
-    const route = findRoute(this.routeGraph, origin, destination)
-    if (!route) {
-      this.log('ERROR', `No route from ${origin} to ${destination}`)
+    const originInt = this.intersections.find((i) => i.id === origin)
+    const destInt = this.intersections.find((i) => i.id === destination)
+
+    if (!originInt || !destInt) {
+      this.log('ERROR', `Invalid origin/destination: ${origin} → ${destination}`)
       return null
     }
 
-    const originInt = this.intersections.find((i) => i.id === origin)
     const id = `AMB_${Date.now()}`
+
+    // Fetch real OSRM route (with fallback)
+    this.log('ROUTING', `Requesting OSRM route: ${origin} → ${destination}`)
+    const osrmRoute = await fetchRouteWithFallback(originInt.coordinates, destInt.coordinates)
+
+    // Build the legacy intersection route for compatibility
+    const legacyRoute = findRoute(this.routeGraph, origin, destination)
+
+    // Build emergency corridor from route geometry
+    const corridor = buildEmergencyCorridor(
+      this.intersections,
+      osrmRoute.coordinates,
+      150
+    )
+
+    const routeTotalDistance = polylineLength(osrmRoute.coordinates)
 
     const ambulance = {
       id,
       vehicleId: id,
       vehicleType: 'ambulance',
-      location: { ...originInt.coordinates },
+      location: { lat: originInt.coordinates.lat, lng: originInt.coordinates.lng },
       speed,
+      heading: 0,
       direction: 'north',
-      route,
-      routeIndex: 0,
-      currentIntersection: origin,
-      nextIntersection: route[1] || null,
       priority,
       status: 'ACTIVE',
+
+      // Route data
+      origin,
+      destination,
+      route: legacyRoute || [origin, destination],   // legacy intersection IDs
+      routeIndex: 0,
+      routeGeometry: osrmRoute.coordinates,            // actual road coordinates [[lat,lng],...]
+      routeDistanceTotal: routeTotalDistance,           // total route length in meters
+      routeDistanceTravelled: 0,                       // meters covered so far
+      routeIsFallback: osrmRoute.isFallback || false,
+      routeOSRM: {
+        distanceMeters: osrmRoute.distanceMeters,
+        durationSeconds: osrmRoute.durationSeconds,
+      },
+
+      // Corridor
+      corridor: corridor.intersections,                // [{id, name, lat, lng, routeIndex},...]
+      corridorIds: corridor.intersectionIds,           // ['INT_1', 'INT_3', ...]
+      corridorIndex: 0,                                // which corridor intersection we're approaching
+
+      // Dynamic state
+      currentIntersection: origin,
+      nextIntersection: corridor.intersectionIds[0] || (legacyRoute ? legacyRoute[1] : null),
       eta: 0,
+      distanceRemaining: routeTotalDistance,
+      distanceToNextIntersection: 0,
+
+      // Timing
       startTime: this.simTime,
       totalWaitTime: 0,
       signalInterruptions: 0,
@@ -248,7 +305,10 @@ class SimulationEngine {
 
     this.ambulances[id] = ambulance
     setAmbulance(id, ambulance)
-    this.log('AMBULANCE', `Spawned ${id}: ${origin} → ${destination} via ${route.join(' → ')}`)
+
+    const routeLabel = osrmRoute.isFallback ? 'FALLBACK' : 'OSRM'
+    this.log('AMBULANCE', `Spawned ${id}: ${origin} → ${destination} [${routeLabel}] dist=${Math.round(routeTotalDistance)}m corridor=[${corridor.intersectionIds.join(',')}]`)
+
     addEmergencyEvent({
       ambulanceId: id,
       intersectionId: origin,
@@ -256,95 +316,220 @@ class SimulationEngine {
       priorityScore: 0,
       eta: 0,
       requiredLane: null,
-      requiredPath: route.join(' → '),
+      requiredPath: corridor.intersectionIds.join(' → '),
       decision: 'SPAWN',
-      reason: `Ambulance spawned from ${origin} to ${destination}`,
+      reason: `Ambulance spawned from ${origin} to ${destination} (${routeLabel} route, ${Math.round(routeTotalDistance)}m)`,
     })
 
     this._notify()
     return ambulance
   }
 
+  /* ── Ambulance Movement (GEOMETRY-BASED) ────── */
   _tickAmbulances(dt) {
     for (const amb of Object.values(this.ambulances)) {
       if (amb.status !== 'ACTIVE') continue
 
-      const currentInt = this.intersections.find((i) => i.id === amb.currentIntersection)
-      const nextInt = this.intersections.find((i) => i.id === amb.nextIntersection)
-      if (!nextInt) {
-        // Arrived at destination
-        amb.status = 'ARRIVED'
-        amb.arrivalTime = this.simTime
-        updateAmbulance(amb.id, { status: 'ARRIVED' })
-        this.log('AMBULANCE', `${amb.id} arrived at destination ${amb.currentIntersection}`)
-        addEmergencyEvent({
-          ambulanceId: amb.id,
-          intersectionId: amb.currentIntersection,
-          eventType: 'ARRIVED',
-          priorityScore: 0,
-          eta: 0,
-          decision: 'COMPLETE',
-          reason: 'Ambulance arrived at destination',
-        })
-        continue
-      }
-
-      // Calculate distance to next intersection
-      const dist = this._haversine(amb.location, nextInt.coordinates)
-      amb.distance = dist
-      amb.eta = calculateETA(dist, amb.speed)
-
-      // Check if signal is green for the ambulance's approach
-      const approach = getApproachDirection(this.routeGraph, amb.currentIntersection, amb.nextIntersection)
-      const signal = this.signalStates[amb.nextIntersection]
-
-      // Move towards next intersection
-      const moveRate = (amb.speed / 3.6) * dt // m/s * dt
-      const fraction = moveRate / Math.max(dist, 1)
-
-      if (dist <= 30) {
-        // Check if we can pass through
-        const canPass =
-          signal && signal[approach] === 'green' &&
-          signal.mode !== SIGNAL_STATES.NORMAL
-
-        if (canPass || signal?.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
-          // Pass through the intersection
-          const sigState = this.signalStates[amb.nextIntersection]
-          if (sigState.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
-            this.signalStates[amb.nextIntersection] = markAmbulancePassed(sigState)
-            setSignalState(amb.nextIntersection, this.signalStates[amb.nextIntersection])
-            amb.signalInterruptions++
-          }
-
-          amb.routeIndex++
-          amb.currentIntersection = amb.nextIntersection
-          amb.nextIntersection = amb.route[amb.routeIndex + 1] || null
-          amb.location = { ...nextInt.coordinates }
-          this.log('AMBULANCE', `${amb.id} passed through ${amb.currentIntersection}`)
-        } else if (signal && signal[approach] !== 'green') {
-          // Waiting at red — count wait time
-          amb.totalWaitTime += dt
-          amb.speed = Math.max(5, amb.speed - dt * 2) // slow down
-        }
+      // Check if route geometry exists
+      if (amb.routeGeometry && amb.routeGeometry.length > 1) {
+        this._tickAmbulanceGeometry(amb, dt)
       } else {
-        // Interpolate position
-        const dlat = nextInt.coordinates.lat - amb.location.lat
-        const dlng = nextInt.coordinates.lng - amb.location.lng
-        amb.location.lat += dlat * Math.min(fraction, 1)
-        amb.location.lng += dlng * Math.min(fraction, 1)
-        amb.speed = Math.min(60, amb.speed + dt * 1) // speed up
+        this._tickAmbulanceLegacy(amb, dt)
       }
-
-      updateAmbulance(amb.id, {
-        location: amb.location,
-        speed: amb.speed,
-        eta: amb.eta,
-        currentIntersection: amb.currentIntersection,
-        nextIntersection: amb.nextIntersection,
-        status: amb.status,
-      })
     }
+  }
+
+  /**
+   * Geometry-based ambulance movement along OSRM route.
+   */
+  _tickAmbulanceGeometry(amb, dt) {
+    // Check if arrived
+    if (amb.routeDistanceTravelled >= amb.routeDistanceTotal) {
+      amb.status = 'ARRIVED'
+      amb.arrivalTime = this.simTime
+      updateAmbulance(amb.id, { status: 'ARRIVED' })
+      this.log('AMBULANCE', `${amb.id} arrived at destination ${amb.destination}`)
+      addEmergencyEvent({
+        ambulanceId: amb.id,
+        intersectionId: amb.destination,
+        eventType: 'ARRIVED',
+        priorityScore: 0,
+        eta: 0,
+        decision: 'COMPLETE',
+        reason: 'Ambulance arrived at destination',
+      })
+      return
+    }
+
+    // Determine current position on the route
+    const pos = interpolateAlongRoute(amb.routeGeometry, amb.routeDistanceTravelled)
+    amb.location = { lat: pos.lat, lng: pos.lng }
+    amb.heading = pos.heading
+
+    // Find next corridor intersection
+    const nextCorridorInt = this._findNextCorridorIntersection(amb, pos.segmentIndex)
+    if (nextCorridorInt) {
+      amb.nextIntersection = nextCorridorInt.id
+      amb.distanceToNextIntersection = distanceToIntersection(
+        amb.location,
+        nextCorridorInt
+      )
+    }
+
+    // Calculate remaining distance and ETA
+    amb.distanceRemaining = amb.routeDistanceTotal - amb.routeDistanceTravelled
+    amb.eta = amb.speed > 0 ? amb.distanceRemaining / (amb.speed / 3.6) : Infinity
+    amb.distance = amb.distanceToNextIntersection // compat with priority engine
+
+    // Check proximity to next intersection for signal logic
+    const nearNextInt = amb.distanceToNextIntersection <= 30 && nextCorridorInt
+    const signal = nextCorridorInt ? this.signalStates[nextCorridorInt.id] : null
+
+    if (nearNextInt && signal) {
+      // Determine approach direction from heading
+      const approach = headingToApproach(amb.heading)
+
+      const canPass =
+        signal[approach] === 'green' &&
+        signal.mode !== SIGNAL_STATES.NORMAL
+
+      if (canPass || signal.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
+        // Pass through — mark it
+        if (signal.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
+          this.signalStates[nextCorridorInt.id] = markAmbulancePassed(signal)
+          setSignalState(nextCorridorInt.id, this.signalStates[nextCorridorInt.id])
+          amb.signalInterruptions++
+        }
+
+        amb.currentIntersection = nextCorridorInt.id
+        amb.corridorIndex = (amb.corridor || []).findIndex(c => c.id === nextCorridorInt.id) + 1
+        this.log('AMBULANCE', `${amb.id} passed through ${nextCorridorInt.id}`)
+
+        // Move forward
+        const moveDistance = (amb.speed / 3.6) * dt
+        amb.routeDistanceTravelled += moveDistance
+        amb.speed = Math.min(60, amb.speed + dt * 1)
+      } else if (signal[approach] !== 'green') {
+        // Waiting at red
+        amb.totalWaitTime += dt
+        amb.speed = Math.max(5, amb.speed - dt * 2)
+        // Don't advance distance
+      }
+    } else {
+      // Normal movement — advance along route
+      const moveDistance = (amb.speed / 3.6) * dt
+      amb.routeDistanceTravelled += moveDistance
+      amb.speed = Math.min(60, amb.speed + dt * 0.5)
+    }
+
+    // Update Firebase
+    updateAmbulance(amb.id, {
+      location: amb.location,
+      speed: amb.speed,
+      heading: amb.heading,
+      eta: amb.eta,
+      distanceRemaining: amb.distanceRemaining,
+      currentIntersection: amb.currentIntersection,
+      nextIntersection: amb.nextIntersection,
+      routeDistanceTravelled: amb.routeDistanceTravelled,
+      status: amb.status,
+    })
+  }
+
+  /**
+   * Find the next corridor intersection that the ambulance hasn't passed yet.
+   */
+  _findNextCorridorIntersection(amb, currentSegmentIndex) {
+    if (!amb.corridor || amb.corridor.length === 0) return null
+
+    for (const ci of amb.corridor) {
+      if (ci.routeIndex > currentSegmentIndex) {
+        return ci
+      }
+    }
+    return null
+  }
+
+  /**
+   * Legacy ambulance movement (straight-line between intersections).
+   * Preserved for backward compatibility when OSRM route is unavailable.
+   */
+  _tickAmbulanceLegacy(amb, dt) {
+    const nextInt = this.intersections.find((i) => i.id === amb.nextIntersection)
+    if (!nextInt) {
+      // Arrived at destination
+      amb.status = 'ARRIVED'
+      amb.arrivalTime = this.simTime
+      updateAmbulance(amb.id, { status: 'ARRIVED' })
+      this.log('AMBULANCE', `${amb.id} arrived at destination ${amb.currentIntersection}`)
+      addEmergencyEvent({
+        ambulanceId: amb.id,
+        intersectionId: amb.currentIntersection,
+        eventType: 'ARRIVED',
+        priorityScore: 0,
+        eta: 0,
+        decision: 'COMPLETE',
+        reason: 'Ambulance arrived at destination',
+      })
+      return
+    }
+
+    // Calculate distance to next intersection
+    const dist = this._haversine(amb.location, nextInt.coordinates)
+    amb.distance = dist
+    amb.distanceRemaining = dist
+    amb.eta = calculateETA(dist, amb.speed)
+
+    // Check if signal is green for the ambulance's approach
+    const approach = getApproachDirection(this.routeGraph, amb.currentIntersection, amb.nextIntersection)
+    const signal = this.signalStates[amb.nextIntersection]
+
+    // Move towards next intersection
+    const moveRate = (amb.speed / 3.6) * dt // m/s * dt
+    const fraction = moveRate / Math.max(dist, 1)
+
+    if (dist <= 30) {
+      // Check if we can pass through
+      const canPass =
+        signal && signal[approach] === 'green' &&
+        signal.mode !== SIGNAL_STATES.NORMAL
+
+      if (canPass || signal?.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
+        // Pass through the intersection
+        const sigState = this.signalStates[amb.nextIntersection]
+        if (sigState.mode === SIGNAL_STATES.EMERGENCY_GREEN) {
+          this.signalStates[amb.nextIntersection] = markAmbulancePassed(sigState)
+          setSignalState(amb.nextIntersection, this.signalStates[amb.nextIntersection])
+          amb.signalInterruptions++
+        }
+
+        amb.routeIndex++
+        amb.currentIntersection = amb.nextIntersection
+        amb.nextIntersection = amb.route[amb.routeIndex + 1] || null
+        amb.location = { ...nextInt.coordinates }
+        this.log('AMBULANCE', `${amb.id} passed through ${amb.currentIntersection}`)
+      } else if (signal && signal[approach] !== 'green') {
+        // Waiting at red — count wait time
+        amb.totalWaitTime += dt
+        amb.speed = Math.max(5, amb.speed - dt * 2) // slow down
+      }
+    } else {
+      // Interpolate position
+      const dlat = nextInt.coordinates.lat - amb.location.lat
+      const dlng = nextInt.coordinates.lng - amb.location.lng
+      amb.location.lat += dlat * Math.min(fraction, 1)
+      amb.location.lng += dlng * Math.min(fraction, 1)
+      amb.speed = Math.min(60, amb.speed + dt * 1) // speed up
+    }
+
+    updateAmbulance(amb.id, {
+      location: amb.location,
+      speed: amb.speed,
+      eta: amb.eta,
+      currentIntersection: amb.currentIntersection,
+      nextIntersection: amb.nextIntersection,
+      status: amb.status,
+    })
   }
 
   /* ── Priority Evaluation ────────────────────── */
@@ -352,11 +537,17 @@ class SimulationEngine {
     for (const amb of Object.values(this.ambulances)) {
       if (amb.status !== 'ACTIVE' || !amb.nextIntersection) continue
 
-      const approach = getApproachDirection(this.routeGraph, amb.currentIntersection, amb.nextIntersection)
-      if (!approach) continue
-
       const signal = this.signalStates[amb.nextIntersection]
-      if (signal.mode !== SIGNAL_STATES.NORMAL) continue // already in emergency mode
+      if (!signal || signal.mode !== SIGNAL_STATES.NORMAL) continue // already in emergency mode
+
+      // Determine approach — use heading for geometry-based, legacy fallback otherwise
+      let approach
+      if (amb.heading !== undefined && amb.routeGeometry) {
+        approach = headingToApproach(amb.heading)
+      } else {
+        approach = getApproachDirection(this.routeGraph, amb.currentIntersection, amb.nextIntersection)
+      }
+      if (!approach) continue
 
       const ts = this.trafficStates[amb.nextIntersection]
       const laneKey = `${approach}_${approach[0].toUpperCase()}1`
@@ -365,7 +556,7 @@ class SimulationEngine {
         ambulance: {
           priority: amb.priority,
           speed: amb.speed,
-          distance: amb.distance || 500,
+          distance: amb.distanceToNextIntersection || amb.distance || 500,
         },
         traffic: {
           density: ts?.densityByLane?.[laneKey] ?? 0.3,
@@ -405,8 +596,12 @@ class SimulationEngine {
 
   /* ── Rolling Green Corridor ─────────────────── */
   _prePlanCorridor(ambulance) {
-    const routeRemaining = ambulance.route.slice(ambulance.routeIndex + 2)
-    for (const intId of routeRemaining) {
+    // Use corridor IDs if available, else fall back to legacy route
+    const ids = ambulance.corridorIds || ambulance.route || []
+    const currentIdx = ids.indexOf(ambulance.currentIntersection)
+    const remaining = currentIdx >= 0 ? ids.slice(currentIdx + 2) : ids.slice(ambulance.routeIndex + 2)
+
+    for (const intId of remaining) {
       const sig = this.signalStates[intId]
       if (sig && sig.mode === SIGNAL_STATES.NORMAL) {
         // Pre-alert: just log for now, actual trigger happens when closer
@@ -431,14 +626,7 @@ class SimulationEngine {
 
   /* ── Haversine distance (meters) ────────────── */
   _haversine(pos1, pos2) {
-    const R = 6371000
-    const toRad = (d) => (d * Math.PI) / 180
-    const dLat = toRad(pos2.lat - pos1.lat)
-    const dLng = toRad(pos2.lng - pos1.lng)
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(pos1.lat)) * Math.cos(toRad(pos2.lat)) * Math.sin(dLng / 2) ** 2
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return haversineDistance(pos1, pos2)
   }
 
   /* ── Event Log ──────────────────────────────── */
@@ -491,6 +679,8 @@ class SimulationEngine {
       signalInterruptions: amb.signalInterruptions,
       routeCleared: amb.status === 'ARRIVED',
       route: amb.route,
+      routeDistance: amb.routeDistanceTotal,
+      routeIsFallback: amb.routeIsFallback,
     }
   }
 }

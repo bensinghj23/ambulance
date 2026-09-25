@@ -1,3 +1,10 @@
+/* ============================================================
+   TrafficMap — Leaflet map showing intersections, ambulances,
+   signal states, and routes.
+
+   UPGRADED: Renders OSRM route geometry polylines instead of
+   straight lines. Shows green corridor on actual road geometry.
+   ============================================================ */
 import React, { useEffect, useRef } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 
@@ -24,9 +31,10 @@ export default function TrafficMap({ height = '500px' }) {
       attributionControl: false,
     })
 
-    // Clean light basemap for professional look instead of dark/neon
+    // Clean light basemap — OpenStreetMap compatible via Carto
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
     }).addTo(map)
 
     mapInstanceRef.current = map
@@ -37,24 +45,23 @@ export default function TrafficMap({ height = '500px' }) {
     }
   }, [])
 
-  // Update markers
+  // Update markers and routes
   useEffect(() => {
     const L = window.L
     const map = mapInstanceRef.current
     if (!L || !map) return
 
-    // Active corridors based on ambulances
     const activeAmbulances = Object.values(sim.ambulances).filter(a => a.status === 'ACTIVE')
-    const activeRoutes = activeAmbulances.flatMap(a => a.route || [])
-    
-    // Draw connections between intersections first
+    const allCorridorIds = new Set(activeAmbulances.flatMap(a => a.corridorIds || a.route || []))
+
+    // Clear previous route layer
     if (routeLayerRef.current) {
       routeLayerRef.current.remove()
     }
     const routeGroup = L.layerGroup().addTo(map)
     routeLayerRef.current = routeGroup
 
-    // Base connections
+    // Draw base connections between intersections (light gray)
     sim.intersections.forEach((int) => {
       Object.values(int.connectedIntersections).forEach((neighborId) => {
         const neighbor = sim.intersections.find((i) => i.id === neighborId)
@@ -65,17 +72,36 @@ export default function TrafficMap({ height = '500px' }) {
               [neighbor.coordinates.lat, neighbor.coordinates.lng],
             ],
             {
-              color: '#D1D5DB', // Light gray
-              weight: 3,
+              color: '#D1D5DB',
+              weight: 2,
+              opacity: 0.5,
             }
           ).addTo(routeGroup)
         }
       })
     })
 
-    // Green corridor connections
+    // Draw OSRM route geometry for active ambulances (green corridor)
     activeAmbulances.forEach((amb) => {
-      if (amb.route) {
+      if (amb.routeGeometry && amb.routeGeometry.length > 1) {
+        // Real OSRM route polyline
+        L.polyline(amb.routeGeometry, {
+          color: '#10B981',
+          weight: 5,
+          opacity: 0.8,
+        }).addTo(routeGroup)
+
+        // Auto-fit map to show the full route
+        if (amb.routeGeometry.length > 2) {
+          try {
+            const bounds = L.latLngBounds(amb.routeGeometry)
+            map.fitBounds(bounds.pad(0.15), { animate: true, maxZoom: 16 })
+          } catch (e) {
+            // ignore bounds errors
+          }
+        }
+      } else if (amb.route) {
+        // Legacy fallback: straight lines between intersections
         const routeCoords = amb.route
           .map((intId) => {
             const int = sim.intersections.find((i) => i.id === intId)
@@ -84,7 +110,7 @@ export default function TrafficMap({ height = '500px' }) {
           .filter(Boolean)
 
         L.polyline(routeCoords, {
-          color: '#10B981', // Emerald green
+          color: '#10B981',
           weight: 4,
           opacity: 0.9,
         }).addTo(routeGroup)
@@ -95,21 +121,21 @@ export default function TrafficMap({ height = '500px' }) {
     sim.intersections.forEach((int) => {
       const sig = sim.signalStates[int.id]
       const isEmergency = sig && sig.mode !== 'NORMAL'
-      const isCorridor = activeRoutes.includes(int.id)
-      
-      let bgColor = '#F3F4F6' // Gray
+      const isCorridor = allCorridorIds.has(int.id)
+
+      let bgColor = '#F3F4F6'
       let borderColor = '#9CA3AF'
       let icon = '🚦'
       let statusText = 'NORMAL'
 
       if (isEmergency) {
-        bgColor = '#D1FAE5' // Light green
-        borderColor = '#10B981' // Emerald
+        bgColor = '#D1FAE5'
+        borderColor = '#10B981'
         icon = '✓'
         statusText = 'ACTIVE CORRIDOR'
       } else if (isCorridor) {
-        bgColor = '#FEF3C7' // Light amber
-        borderColor = '#F59E0B' // Amber
+        bgColor = '#FEF3C7'
+        borderColor = '#F59E0B'
         icon = '→'
         statusText = 'PREPARING'
       }
@@ -175,6 +201,9 @@ export default function TrafficMap({ height = '500px' }) {
 
       if (amb.status === 'ARRIVED') return
 
+      // Rotate icon based on heading
+      const rotation = amb.heading || 0
+
       const ambIcon = L.divIcon({
         className: 'ambulance-marker',
         html: `
@@ -186,6 +215,7 @@ export default function TrafficMap({ height = '500px' }) {
             display: flex; align-items: center; justify-content: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             color: white; font-size: 12px;
+            transform: rotate(${rotation}deg);
           ">✚</div>
           <div style="
             position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
@@ -198,10 +228,13 @@ export default function TrafficMap({ height = '500px' }) {
         iconAnchor: [12, 12],
       })
 
+      const distRemaining = amb.distanceRemaining != null ? `${Math.round(amb.distanceRemaining)}m` : '—'
+      const routeType = amb.routeIsFallback ? 'FALLBACK' : 'OSRM'
+
       const marker = L.marker([amb.location.lat, amb.location.lng], { icon: ambIcon, zIndexOffset: 1000 })
         .addTo(map)
         .bindPopup(`
-          <div style="font-family: Inter, sans-serif; min-width: 180px;">
+          <div style="font-family: Inter, sans-serif; min-width: 200px;">
             <div style="font-weight: 700; margin-bottom: 8px;">${amb.id}</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px;">
               <div style="color: #6B7280;">Status:</div>
@@ -210,12 +243,18 @@ export default function TrafficMap({ height = '500px' }) {
               <div style="font-weight: 500;">${amb.speed?.toFixed(0)} km/h</div>
               <div style="color: #6B7280;">ETA:</div>
               <div style="font-weight: 500;">${amb.eta?.toFixed(0)}s</div>
+              <div style="color: #6B7280;">Heading:</div>
+              <div style="font-weight: 500;">${amb.heading?.toFixed(0)}°</div>
+              <div style="color: #6B7280;">Distance Left:</div>
+              <div style="font-weight: 500;">${distRemaining}</div>
               <div style="color: #6B7280;">Priority:</div>
               <div style="font-weight: 500;">${amb.priority}</div>
               <div style="color: #6B7280;">Current Int:</div>
               <div style="font-weight: 500;">${amb.currentIntersection || '—'}</div>
               <div style="color: #6B7280;">Next Int:</div>
               <div style="font-weight: 500;">${amb.nextIntersection || '—'}</div>
+              <div style="color: #6B7280;">Route:</div>
+              <div style="font-weight: 500;">${routeType}</div>
             </div>
           </div>
         `)
