@@ -20,7 +20,7 @@ const DEMO_USER = {
   uid: 'demo_operator_001',
   name: 'Alex Mercer',
   email: 'operator@smartcity.gov',
-  role: 'TRAFFIC_OPERATOR', // ADMIN, TRAFFIC_OPERATOR, ANALYST, VIEWER
+  role: 'COMMAND_CENTER', // AMBULANCE_DRIVER, COMMAND_CENTER, ANALYST, ADMIN, VIEWER
   department: 'Emergency Operations Center',
   photoURL: null,
   createdAt: new Date().toISOString(),
@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
           uid: user.uid,
           email: user.email,
           name: profile?.name || user.displayName || user.email.split('@')[0],
-          role: profile?.role || 'TRAFFIC_OPERATOR',
+          role: profile?.role || 'COMMAND_CENTER',
           photoURL: profile?.photoURL || user.photoURL,
           ...profile,
         })
@@ -65,35 +65,44 @@ export function AuthProvider({ children }) {
         uid: res.user.uid,
         email: res.user.email,
         name: profile?.name || res.user.email.split('@')[0],
-        role: profile?.role || 'TRAFFIC_OPERATOR',
+        role: profile?.role || 'COMMAND_CENTER',
         ...profile,
       })
       return res.user
     }
     // Simulation fallback
-    const role = email.includes('admin')
-      ? 'ADMIN'
-      : email.includes('analyst')
-      ? 'ANALYST'
-      : email.includes('viewer')
-      ? 'VIEWER'
-      : 'TRAFFIC_OPERATOR'
+    let role = 'COMMAND_CENTER'
+    let ambulanceId = null
+
+    if (email.includes('admin')) {
+      role = 'ADMIN'
+    } else if (email.includes('analyst')) {
+      role = 'ANALYST'
+    } else if (email.includes('viewer')) {
+      role = 'VIEWER'
+    } else if (email.includes('driver')) {
+      role = 'AMBULANCE_DRIVER'
+      // naive extraction for MVP, e.g. driver1@... -> AMB-001
+      const match = email.match(/\d+/)
+      ambulanceId = match ? `AMB-${match[0].padStart(3, '0')}` : 'AMB-001'
+    }
 
     const simulatedUser = {
       uid: `usr_${Date.now()}`,
       name: email.split('@')[0].toUpperCase(),
       email,
       role,
+      ambulanceId,
       department: 'Emergency Operations Center',
     }
     setCurrentUser(simulatedUser)
     return simulatedUser
   }
 
-  const register = async (email, password, name, role = 'TRAFFIC_OPERATOR') => {
+  const register = async (email, password, name, role = 'COMMAND_CENTER', ambulanceId = null) => {
     if (isFirebaseReady && auth) {
       const res = await createUserWithEmailAndPassword(auth, email, password)
-      const profileData = { name, email, role, createdAt: new Date().toISOString() }
+      const profileData = { name, email, role, ambulanceId, createdAt: new Date().toISOString() }
       await setDocument('users', res.user.uid, profileData)
       setCurrentUser({ uid: res.user.uid, ...profileData })
       return res.user
@@ -103,6 +112,7 @@ export function AuthProvider({ children }) {
       name,
       email,
       role,
+      ambulanceId,
       department: 'Emergency Operations Center',
     }
     setCurrentUser(newUser)

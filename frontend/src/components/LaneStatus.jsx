@@ -44,13 +44,13 @@ function LaneBar({ label, value, max = 1, color = 'var(--clr-primary)' }) {
   )
 }
 
-export default function LaneStatus({ trafficState, intersectionId }) {
-  if (!trafficState) {
+export default function LaneStatus({ trafficState, intersectionId, simTime = 1 }) {
+  if (!trafficState || simTime === 0) {
     return (
       <div className="card">
         <div className="card-title">Lane Status</div>
         <div className="empty-state" style={{ padding: 'var(--space-md)' }}>
-          <div className="empty-state-text">No traffic data</div>
+          <div className="empty-state-text">Simulation paused<br/>No live traffic data</div>
         </div>
       </div>
     )

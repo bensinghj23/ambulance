@@ -30,9 +30,12 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ForgotPassword from './pages/ForgotPassword'
 
+import AdminDashboard from './pages/AdminDashboard'
+import DriverDashboard from './pages/DriverDashboard'
+
 // Protected Route Wrapper
-function ProtectedRoute({ children }) {
-  const { currentUser, loading } = useAuth()
+function ProtectedRoute({ children, allowedRoles }) {
+  const { currentUser, loading, hasPermission } = useAuth()
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--clr-bg-base)' }}>
@@ -43,10 +46,34 @@ function ProtectedRoute({ children }) {
   if (!currentUser) {
     return <Navigate to="/login" replace />
   }
+  if (allowedRoles && !hasPermission(allowedRoles) && currentUser.role !== 'ADMIN') {
+    // Basic redirect for unauthorized roles
+    return <Navigate to={currentUser.role === 'AMBULANCE_DRIVER' ? '/driver' : '/dashboard'} replace />
+  }
   return children
 }
 
-// App Shell Layout for authenticated routes
+// Redirect root based on role
+function RootRedirect() {
+  const { currentUser } = useAuth()
+  if (!currentUser) return <Navigate to="/login" replace />
+  
+  switch (currentUser.role) {
+    case 'AMBULANCE_DRIVER':
+      return <Navigate to="/driver" replace />
+    case 'COMMAND_CENTER':
+    case 'VIEWER':
+      return <Navigate to="/dashboard" replace />
+    case 'ANALYST':
+      return <Navigate to="/analytics" replace />
+    case 'ADMIN':
+      return <Navigate to="/admin" replace />
+    default:
+      return <Navigate to="/dashboard" replace />
+  }
+}
+
+// App Shell Layout for authenticated routes (Operators, Admins)
 function AppLayout() {
   return (
     <div className="app-layout">
@@ -56,6 +83,7 @@ function AppLayout() {
         <div className="app-content">
           <Breadcrumbs />
           <Routes>
+            <Route path="/" element={<RootRedirect />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/live-traffic" element={<LiveTraffic />} />
             <Route path="/computer-vision" element={<ComputerVision />} />
@@ -69,6 +97,7 @@ function AppLayout() {
             <Route path="/events" element={<Events />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
@@ -88,11 +117,26 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
 
-            {/* Protected Application Routes */}
+            {/* Standalone Driver App */}
+            <Route 
+              path="/driver/*" 
+              element={
+                <ProtectedRoute allowedRoles={['AMBULANCE_DRIVER', 'ADMIN']}>
+                  <div style={{ minHeight: '100vh', background: 'var(--clr-bg-base)' }}>
+                    <Routes>
+                      <Route path="/" element={<DriverDashboard />} />
+                      <Route path="*" element={<Navigate to="/driver" replace />} />
+                    </Routes>
+                  </div>
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Protected Application Routes (Operator, Admin) */}
             <Route
               path="/*"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowedRoles={['COMMAND_CENTER', 'ADMIN', 'ANALYST', 'VIEWER']}>
                   <AppLayout />
                 </ProtectedRoute>
               }

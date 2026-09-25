@@ -151,9 +151,9 @@ export function makeDecision({
   // ── Clearance prediction vs ETA ───────────────────
   if (clearanceTime > eta) {
     score += 15
-    reasons.push(`Predicted clearance (${clearanceTime}s) EXCEEDS ambulance ETA (${Math.round(eta)}s) — early action needed (+15)`)
+    reasons.push(`[Source: ${details.clearanceSource}] Predicted clearance (${clearanceTime}s) EXCEEDS ambulance ETA (${Math.round(eta)}s) — early action needed (+15)`)
   } else {
-    reasons.push(`Predicted clearance (${clearanceTime}s) within ambulance ETA (${Math.round(eta)}s)`)
+    reasons.push(`[Source: ${details.clearanceSource}] Predicted clearance (${clearanceTime}s) within ambulance ETA (${Math.round(eta)}s)`)
   }
 
   // ── Movement complexity ───────────────────────────

@@ -81,7 +81,7 @@ export default function LiveTraffic() {
 
         {/* Right Sidebar: Lane Status & Approach Details */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <LaneStatus trafficState={currentTraffic} intersectionId={selectedIntersection} />
+          <LaneStatus trafficState={currentTraffic} intersectionId={selectedIntersection} simTime={sim.simTime} />
 
           {/* Connected Intersections Graph info */}
           <div className="card">

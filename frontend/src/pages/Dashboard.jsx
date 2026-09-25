@@ -92,10 +92,13 @@ export default function Dashboard() {
           
           {/* System Metrics */}
           <div className="card" style={{ padding: 'var(--space-md)' }}>
-            <div className="card-title" style={{ marginBottom: 'var(--space-md)', fontSize: '15px' }}>
-              OPERATIONAL METRICS
+            <div className="card-title" style={{ marginBottom: 'var(--space-md)', fontSize: '15px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>OPERATIONAL METRICS</span>
+              <span className="badge badge-primary">
+                {sim.simulationBackend === 'SUMO' ? 'SUMO + TraCI' : 'Browser Simulation'}
+              </span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <div className="stat-label" style={{ fontSize: '11px' }}>Active Emergencies</div>
                 <div style={{ fontSize: '24px', fontWeight: '600', color: activeAmbulances.length > 0 ? 'var(--clr-danger)' : 'inherit' }}>{activeAmbulances.length}</div>
@@ -118,6 +121,11 @@ export default function Dashboard() {
                   {emergencySignals.length > 0 ? 'ACTIVE' : 'STANDBY'}
                 </div>
               </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '11px', color: 'var(--clr-text-muted)', borderTop: '1px solid var(--clr-border)', paddingTop: '12px' }}>
+              <div>Traffic Source: <strong style={{ color: 'var(--clr-text-heading)' }}>{sim.simulationBackend === 'SUMO' ? 'SUMO' : 'SIMULATION'}</strong></div>
+              <div style={{ textAlign: 'center' }}>Telemetry Source: <strong style={{ color: 'var(--clr-text-heading)' }}>{sim.simulationBackend === 'SUMO' ? 'SUMO' : 'SIMULATION'}</strong></div>
+              <div style={{ textAlign: 'right' }}>Signal Source: <strong style={{ color: 'var(--clr-text-heading)' }}>{sim.simulationBackend === 'SUMO' ? 'SUMO' : 'SIMULATION'}</strong></div>
             </div>
           </div>
 
