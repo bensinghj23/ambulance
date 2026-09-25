@@ -31,34 +31,34 @@ export default function ComputerVision() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ borderBottom: '1px solid var(--clr-border)', paddingBottom: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
         <div>
-          <h1 className="page-title">Computer Vision Analysis</h1>
-          <p className="page-desc">
-            OpenCV + YOLO + ByteTrack Object Detection, Tracking & Lane ROI Safety Verification
+          <h1 className="page-title" style={{ fontSize: '22px' }}>Computer Vision Analysis</h1>
+          <p className="page-desc" style={{ color: 'var(--clr-text-muted)', fontSize: '13px' }}>
+            Object Detection, Tracking & Lane ROI Safety Verification [SIMULATED MODULE]
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-          <span className="badge badge-success">
-            <Cpu size={12} /> YOLOv8 Inference Active (30 FPS)
+          <span className="badge badge-neutral">
+            <Cpu size={12} /> CV SIMULATION MODE
           </span>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--space-lg)' }}>
+      <div className="grid-2">
         {/* Left Column: Camera Feed & Video Overlay */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           <div className="card" style={{ padding: 'var(--space-md)' }}>
             <div className="card-header" style={{ marginBottom: 'var(--space-sm)' }}>
               <div className="card-title">
-                <Camera size={18} style={{ color: 'var(--clr-primary)' }} /> Camera Feed — {selectedCamera}
+                <Camera size={18} style={{ color: 'var(--clr-text-muted)' }} /> Camera Feed — {selectedCamera}
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                 <select
                   className="form-select"
                   value={selectedCamera}
                   onChange={(e) => setSelectedCamera(e.target.value)}
-                  style={{ padding: '2px 24px 2px 8px', fontSize: '0.75rem' }}
+                  style={{ padding: '2px 24px 2px 8px', fontSize: '12px' }}
                 >
                   <option value="CAM_INT_1">INT_1 — North Camera</option>
                   <option value="CAM_INT_2">INT_2 — East Camera</option>
@@ -74,27 +74,27 @@ export default function ComputerVision() {
                 position: 'relative',
                 width: '100%',
                 aspectRatio: '16/9',
-                background: '#0a0d14',
-                borderRadius: 'var(--radius-md)',
+                background: '#1F2937', // Dark gray for camera feed
+                borderRadius: 'var(--radius-sm)',
                 overflow: 'hidden',
-                border: '1px solid var(--clr-border)',
+                border: '1px solid #374151',
               }}
             >
               {/* Simulated Road Lane Markings background */}
               <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
                 {/* Lane Dividers */}
-                <line x1="25%" y1="0" x2="25%" y2="100%" stroke="rgba(255,255,255,0.1)" strokeDasharray="10,10" strokeWidth="2" />
-                <line x1="50%" y1="0" x2="50%" y2="100%" stroke="rgba(0,212,255,0.3)" strokeWidth="3" />
-                <line x1="75%" y1="0" x2="75%" y2="100%" stroke="rgba(255,255,255,0.1)" strokeDasharray="10,10" strokeWidth="2" />
+                <line x1="25%" y1="0" x2="25%" y2="100%" stroke="rgba(255,255,255,0.15)" strokeDasharray="10,10" strokeWidth="2" />
+                <line x1="50%" y1="0" x2="50%" y2="100%" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
+                <line x1="75%" y1="0" x2="75%" y2="100%" stroke="rgba(255,255,255,0.15)" strokeDasharray="10,10" strokeWidth="2" />
 
                 {/* Polygonal Lane ROIs */}
                 {showROIs && (
                   <>
-                    <polygon points="50,20 280,20 280,380 50,380" fill="rgba(0,212,255,0.06)" stroke="rgba(0,212,255,0.3)" strokeWidth="1.5" strokeDasharray="4,4" />
-                    <text x="60" y="45" fill="#00d4ff" fontSize="12" fontFamily="JetBrains Mono">ROI: Lane N1 (Through)</text>
+                    <polygon points="50,20 280,20 280,380 50,380" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeDasharray="4,4" />
+                    <text x="60" y="45" fill="#E5E7EB" fontSize="12" fontFamily="var(--font-mono)">ROI: Lane N1</text>
 
-                    <polygon points="300,20 540,20 540,380 300,380" fill="rgba(0,230,118,0.06)" stroke="rgba(0,230,118,0.3)" strokeWidth="1.5" strokeDasharray="4,4" />
-                    <text x="310" y="45" fill="#00e676" fontSize="12" fontFamily="JetBrains Mono">ROI: Lane N2 (Left Turn)</text>
+                    <polygon points="300,20 540,20 540,380 300,380" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeDasharray="4,4" />
+                    <text x="310" y="45" fill="#E5E7EB" fontSize="12" fontFamily="var(--font-mono)">ROI: Lane N2</text>
                   </>
                 )}
               </svg>
@@ -110,27 +110,24 @@ export default function ComputerVision() {
                       top: `${d.bbox.y}px`,
                       width: `${d.bbox.w}px`,
                       height: `${d.bbox.h}px`,
-                      border: `2px solid ${d.isEmergency ? 'var(--clr-danger)' : d.label === 'bus' ? 'var(--clr-warning)' : 'var(--clr-primary)'}`,
-                      borderRadius: 4,
-                      background: d.isEmergency ? 'rgba(255,23,68,0.2)' : 'rgba(0,212,255,0.1)',
-                      boxShadow: d.isEmergency ? '0 0 16px rgba(255,23,68,0.6)' : 'none',
+                      border: `2px solid ${d.isEmergency ? '#EF4444' : d.label === 'bus' ? '#F59E0B' : '#9CA3AF'}`,
+                      background: d.isEmergency ? 'rgba(239,68,68,0.15)' : 'transparent',
                     }}
                   >
                     <div
                       style={{
                         position: 'absolute',
-                        top: -20,
-                        left: 0,
-                        background: d.isEmergency ? 'var(--clr-danger)' : '#1e293b',
+                        top: -18,
+                        left: -2,
+                        background: d.isEmergency ? '#EF4444' : '#4B5563',
                         color: '#fff',
                         fontSize: '10px',
-                        padding: '1px 4px',
-                        borderRadius: 2,
+                        padding: '2px 4px',
                         whiteSpace: 'nowrap',
                         fontFamily: 'var(--font-mono)',
                       }}
                     >
-                      {d.label.toUpperCase()} #{d.id.slice(-3)} ({(d.confidence * 100).toFixed(0)}%)
+                      {d.label.toUpperCase()} {d.id} [SIM]
                     </div>
                   </div>
                 ))}
@@ -141,27 +138,27 @@ export default function ComputerVision() {
                   position: 'absolute',
                   bottom: 12,
                   left: 12,
-                  background: 'rgba(0,0,0,0.7)',
+                  background: 'rgba(0,0,0,0.6)',
                   padding: '4px 8px',
                   borderRadius: 4,
                   fontSize: '11px',
                   fontFamily: 'var(--font-mono)',
-                  color: '#00e676',
+                  color: '#FFFFFF',
                 }}
               >
-                ● LIVE REC {new Date().toLocaleTimeString()} | 1080p@30FPS
+                ● SIMULATED FEED | {new Date().toLocaleTimeString()}
               </div>
             </div>
 
             {/* Controls */}
             <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-              <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" checked={showROIs} onChange={(e) => setShowROIs(e.target.checked)} />
                 Show Lane ROIs
               </label>
-              <label style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" checked={showBoundingBoxes} onChange={(e) => setShowBoundingBoxes(e.target.checked)} />
-                Show YOLO Bounding Boxes & Track IDs
+                Show Simulated Bounding Boxes
               </label>
             </div>
           </div>
@@ -170,42 +167,42 @@ export default function ComputerVision() {
         {/* Right Column: Detection Stats & Safety Verification */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           {/* CV Safety Verification */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <ShieldAlert size={18} style={{ color: 'var(--clr-warning)' }} /> Safety Verification
+          <div className="card" style={{ padding: 'var(--space-md)' }}>
+            <div className="card-header" style={{ marginBottom: '16px' }}>
+              <div className="card-title" style={{ fontSize: '15px' }}>
+                <ShieldAlert size={18} style={{ color: 'var(--clr-warning)', marginRight: '6px' }} /> Safety Verification
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span>Center Intersection Occupied:</span>
-                <span className="badge badge-success">CLEAR</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--clr-border)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--clr-text-muted)' }}>Intersection Occupied:</span>
+                <span style={{ fontWeight: '600', color: 'var(--clr-success)' }}>CLEAR</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span>Emergency Vehicle Detected:</span>
-                <span className={`badge ${activeAmbulance ? 'badge-danger' : 'badge-neutral'}`}>
-                  {activeAmbulance ? 'AMBULANCE AMB_001' : 'NONE'}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--clr-border)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--clr-text-muted)' }}>Emergency Vehicle Detected:</span>
+                <span style={{ fontWeight: '600', color: activeAmbulance ? 'var(--clr-danger)' : 'var(--clr-text-muted)' }}>
+                  {activeAmbulance ? activeAmbulance.id : 'NONE'}
                 </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span>Conflicting Pedestrians:</span>
-                <span className="badge badge-success">0 DETECTED</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--clr-border)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--clr-text-muted)' }}>Conflicting Pedestrians:</span>
+                <span style={{ fontWeight: '600', color: 'var(--clr-success)' }}>0 DETECTED</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span>YOLO Avg Confidence:</span>
-                <span className="badge badge-primary">{(confidence * 100).toFixed(0)}%</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--clr-text-muted)' }}>Data Source:</span>
+                <span style={{ fontWeight: '600', color: 'var(--clr-text-dim)' }}>SIMULATION STATE</span>
               </div>
             </div>
           </div>
 
           {/* Real-time Object Tracking List */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">
-                <Eye size={18} style={{ color: 'var(--clr-primary)' }} /> Tracked Objects ({detections.length})
+          <div className="card" style={{ padding: 'var(--space-md)' }}>
+            <div className="card-header" style={{ marginBottom: '16px' }}>
+              <div className="card-title" style={{ fontSize: '15px' }}>
+                <Eye size={18} style={{ color: 'var(--clr-text-muted)', marginRight: '6px' }} /> Simulated Objects ({detections.length})
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {detections.map((d) => (
                 <div
                   key={d.id}
@@ -213,18 +210,18 @@ export default function ComputerVision() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '6px 10px',
-                    background: 'rgba(255,255,255,0.03)',
+                    padding: '8px 12px',
+                    border: '1px solid var(--clr-border)',
                     borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.78rem',
+                    fontSize: '12px',
                   }}
                 >
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{d.id}</span>
-                  <span className={`badge ${d.isEmergency ? 'badge-danger' : 'badge-neutral'}`}>
+                  <span style={{ fontWeight: 600, color: d.isEmergency ? 'var(--clr-danger)' : 'var(--clr-text)' }}>
                     {d.label.toUpperCase()}
                   </span>
                   <span style={{ color: 'var(--clr-text-muted)' }}>{d.speed} km/h</span>
-                  <span style={{ color: 'var(--clr-primary)', fontFamily: 'var(--font-mono)' }}>{d.lane}</span>
+                  <span style={{ color: 'var(--clr-text-dim)', fontFamily: 'var(--font-mono)' }}>{d.lane}</span>
                 </div>
               ))}
             </div>

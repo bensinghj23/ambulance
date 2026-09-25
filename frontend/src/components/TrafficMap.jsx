@@ -1,7 +1,3 @@
-/* ============================================================
-   TrafficMap — Leaflet map showing intersections, ambulances,
-   signal states, and routes.
-   ============================================================ */
 import React, { useEffect, useRef } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 
@@ -28,8 +24,8 @@ export default function TrafficMap({ height = '500px' }) {
       attributionControl: false,
     })
 
-    // Dark tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Clean light basemap for professional look instead of dark/neon
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(map)
 
@@ -47,66 +43,18 @@ export default function TrafficMap({ height = '500px' }) {
     const map = mapInstanceRef.current
     if (!L || !map) return
 
-    // Intersection markers
-    sim.intersections.forEach((int) => {
-      const sig = sim.signalStates[int.id]
-      const isEmergency = sig && sig.mode !== 'NORMAL'
-      const color = isEmergency ? '#ff1744' : '#00d4ff'
-
-      if (markersRef.current[int.id]) {
-        markersRef.current[int.id].remove()
-      }
-
-      // Custom intersection icon
-      const icon = L.divIcon({
-        className: '',
-        html: `
-          <div style="
-            width: 32px; height: 32px;
-            background: ${isEmergency ? 'rgba(255,23,68,0.3)' : 'rgba(0,212,255,0.2)'};
-            border: 2px solid ${color};
-            border-radius: 8px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 14px;
-            box-shadow: 0 0 12px ${color}40;
-          ">🚦</div>
-        `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      })
-
-      const marker = L.marker([int.coordinates.lat, int.coordinates.lng], { icon })
-        .addTo(map)
-
-      // Popup with signal state
-      const popupHtml = `
-        <div style="font-family: Inter, sans-serif; min-width: 150px;">
-          <div style="font-weight: 700; margin-bottom: 4px;">${int.name}</div>
-          <div style="font-size: 12px; color: #666;">${int.id}</div>
-          ${sig ? `
-            <div style="margin-top: 8px; font-size: 12px;">
-              <div>Mode: <strong>${sig.mode}</strong></div>
-              <div style="display: flex; gap: 8px; margin-top: 4px;">
-                <span>N: <span style="color: ${sig.north === 'green' ? '#00e676' : sig.north === 'red' ? '#ff1744' : '#ffd600'}">${sig.north?.toUpperCase()}</span></span>
-                <span>S: <span style="color: ${sig.south === 'green' ? '#00e676' : sig.south === 'red' ? '#ff1744' : '#ffd600'}">${sig.south?.toUpperCase()}</span></span>
-                <span>E: <span style="color: ${sig.east === 'green' ? '#00e676' : sig.east === 'red' ? '#ff1744' : '#ffd600'}">${sig.east?.toUpperCase()}</span></span>
-                <span>W: <span style="color: ${sig.west === 'green' ? '#00e676' : sig.west === 'red' ? '#ff1744' : '#ffd600'}">${sig.west?.toUpperCase()}</span></span>
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `
-      marker.bindPopup(popupHtml)
-      markersRef.current[int.id] = marker
-    })
-
-    // Draw connections between intersections
+    // Active corridors based on ambulances
+    const activeAmbulances = Object.values(sim.ambulances).filter(a => a.status === 'ACTIVE')
+    const activeRoutes = activeAmbulances.flatMap(a => a.route || [])
+    
+    // Draw connections between intersections first
     if (routeLayerRef.current) {
       routeLayerRef.current.remove()
     }
     const routeGroup = L.layerGroup().addTo(map)
     routeLayerRef.current = routeGroup
 
+    // Base connections
     sim.intersections.forEach((int) => {
       Object.values(int.connectedIntersections).forEach((neighborId) => {
         const neighbor = sim.intersections.find((i) => i.id === neighborId)
@@ -117,13 +65,106 @@ export default function TrafficMap({ height = '500px' }) {
               [neighbor.coordinates.lat, neighbor.coordinates.lng],
             ],
             {
-              color: 'rgba(0,212,255,0.25)',
+              color: '#D1D5DB', // Light gray
               weight: 3,
-              dashArray: '8 4',
             }
           ).addTo(routeGroup)
         }
       })
+    })
+
+    // Green corridor connections
+    activeAmbulances.forEach((amb) => {
+      if (amb.route) {
+        const routeCoords = amb.route
+          .map((intId) => {
+            const int = sim.intersections.find((i) => i.id === intId)
+            return int ? [int.coordinates.lat, int.coordinates.lng] : null
+          })
+          .filter(Boolean)
+
+        L.polyline(routeCoords, {
+          color: '#10B981', // Emerald green
+          weight: 4,
+          opacity: 0.9,
+        }).addTo(routeGroup)
+      }
+    })
+
+    // Intersection markers
+    sim.intersections.forEach((int) => {
+      const sig = sim.signalStates[int.id]
+      const isEmergency = sig && sig.mode !== 'NORMAL'
+      const isCorridor = activeRoutes.includes(int.id)
+      
+      let bgColor = '#F3F4F6' // Gray
+      let borderColor = '#9CA3AF'
+      let icon = '🚦'
+      let statusText = 'NORMAL'
+
+      if (isEmergency) {
+        bgColor = '#D1FAE5' // Light green
+        borderColor = '#10B981' // Emerald
+        icon = '✓'
+        statusText = 'ACTIVE CORRIDOR'
+      } else if (isCorridor) {
+        bgColor = '#FEF3C7' // Light amber
+        borderColor = '#F59E0B' // Amber
+        icon = '→'
+        statusText = 'PREPARING'
+      }
+
+      if (markersRef.current[int.id]) {
+        markersRef.current[int.id].remove()
+      }
+
+      const divIcon = L.divIcon({
+        className: '',
+        html: `
+          <div style="
+            width: 28px; height: 28px;
+            background: ${bgColor};
+            border: 2px solid ${borderColor};
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; color: ${borderColor}; font-size: 14px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+          ">${icon}</div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      })
+
+      const marker = L.marker([int.coordinates.lat, int.coordinates.lng], { icon: divIcon })
+        .addTo(map)
+
+      // Popup with signal state
+      const popupHtml = `
+        <div style="font-family: Inter, sans-serif; min-width: 200px;">
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">INTERSECTION ${int.id}</div>
+          <div style="font-size: 11px; font-weight: 600; color: ${isEmergency ? '#10B981' : isCorridor ? '#F59E0B' : '#6B7280'}; margin-bottom: 8px;">${statusText}</div>
+          ${sig ? `
+            <div style="font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+              <div style="color: #6B7280;">Mode:</div>
+              <div style="font-weight: 500;">${sig.mode}</div>
+              <div style="color: #6B7280;">Phase:</div>
+              <div style="font-weight: 500;">${sig.phase}</div>
+              <div style="color: #6B7280;">Emerg. Approach:</div>
+              <div style="font-weight: 500;">${sig.emergencyApproach || 'None'}</div>
+              <div style="color: #6B7280;">Connected:</div>
+              <div style="font-weight: 500;">${Object.values(int.connectedIntersections).join(', ')}</div>
+            </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #E5E7EB; display: flex; justify-content: space-between; font-size: 11px;">
+              <span>N: <b style="color: ${sig.north === 'green' ? '#10B981' : sig.north === 'red' ? '#EF4444' : '#F59E0B'}">${sig.north?.toUpperCase()}</b></span>
+              <span>S: <b style="color: ${sig.south === 'green' ? '#10B981' : sig.south === 'red' ? '#EF4444' : '#F59E0B'}">${sig.south?.toUpperCase()}</b></span>
+              <span>E: <b style="color: ${sig.east === 'green' ? '#10B981' : sig.east === 'red' ? '#EF4444' : '#F59E0B'}">${sig.east?.toUpperCase()}</b></span>
+              <span>W: <b style="color: ${sig.west === 'green' ? '#10B981' : sig.west === 'red' ? '#EF4444' : '#F59E0B'}">${sig.west?.toUpperCase()}</b></span>
+            </div>
+          ` : ''}
+        </div>
+      `
+      marker.bindPopup(popupHtml)
+      markersRef.current[int.id] = marker
     })
 
     // Ambulance markers
@@ -138,48 +179,48 @@ export default function TrafficMap({ height = '500px' }) {
         className: 'ambulance-marker',
         html: `
           <div style="
-            width: 28px; height: 28px;
-            background: rgba(255,23,68,0.8);
-            border: 2px solid #ff1744;
+            width: 24px; height: 24px;
+            background: #EF4444;
+            border: 2px solid #FFFFFF;
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            font-size: 16px;
-            box-shadow: 0 0 20px rgba(255,23,68,0.6);
-          ">🚑</div>
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            color: white; font-size: 12px;
+          ">✚</div>
+          <div style="
+            position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 2px 4px; border-radius: 4px;
+            font-size: 10px; font-weight: bold; border: 1px solid #E5E7EB;
+            white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+          ">${amb.id}</div>
         `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
       })
 
       const marker = L.marker([amb.location.lat, amb.location.lng], { icon: ambIcon, zIndexOffset: 1000 })
         .addTo(map)
         .bindPopup(`
-          <div style="font-family: Inter, sans-serif;">
-            <div style="font-weight: 700;">${amb.id}</div>
-            <div style="font-size: 12px;">Speed: ${amb.speed?.toFixed(0)} km/h</div>
-            <div style="font-size: 12px;">ETA: ${amb.eta?.toFixed(0)}s</div>
-            <div style="font-size: 12px;">Priority: ${amb.priority}</div>
+          <div style="font-family: Inter, sans-serif; min-width: 180px;">
+            <div style="font-weight: 700; margin-bottom: 8px;">${amb.id}</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px;">
+              <div style="color: #6B7280;">Status:</div>
+              <div style="font-weight: 600; color: #DC2626;">PROCEEDING</div>
+              <div style="color: #6B7280;">Speed:</div>
+              <div style="font-weight: 500;">${amb.speed?.toFixed(0)} km/h</div>
+              <div style="color: #6B7280;">ETA:</div>
+              <div style="font-weight: 500;">${amb.eta?.toFixed(0)}s</div>
+              <div style="color: #6B7280;">Priority:</div>
+              <div style="font-weight: 500;">${amb.priority}</div>
+              <div style="color: #6B7280;">Current Int:</div>
+              <div style="font-weight: 500;">${amb.currentIntersection || '—'}</div>
+              <div style="color: #6B7280;">Next Int:</div>
+              <div style="font-weight: 500;">${amb.nextIntersection || '—'}</div>
+            </div>
           </div>
         `)
 
       ambulanceMarkersRef.current[amb.id] = marker
-
-      // Draw ambulance route
-      if (amb.route) {
-        const routeCoords = amb.route
-          .map((intId) => {
-            const int = sim.intersections.find((i) => i.id === intId)
-            return int ? [int.coordinates.lat, int.coordinates.lng] : null
-          })
-          .filter(Boolean)
-
-        L.polyline(routeCoords, {
-          color: '#ff1744',
-          weight: 4,
-          opacity: 0.7,
-          dashArray: '10 5',
-        }).addTo(routeGroup)
-      }
     })
   }, [sim.intersections, sim.signalStates, sim.ambulances])
 
@@ -187,7 +228,7 @@ export default function TrafficMap({ height = '500px' }) {
     <div
       ref={mapRef}
       className="map-container"
-      style={{ height, filter: 'none' }}
+      style={{ height, background: '#E5E7EB' }}
     />
   )
 }
