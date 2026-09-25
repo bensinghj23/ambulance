@@ -92,7 +92,7 @@ export default function Topbar() {
         {/* Emergency Status Pill */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {emergencySignals.length > 0 ? (
-            <span className="badge badge-danger" style={{ animation: 'badge-pulse 1s infinite' }}>
+            <span className="badge badge-danger">
               <Activity size={12} />
               CORRIDOR ACTIVE ({emergencySignals.length})
             </span>
@@ -138,7 +138,7 @@ export default function Topbar() {
                 width: 28,
                 height: 28,
                 borderRadius: '50%',
-                background: 'var(--grad-primary)',
+                background: 'var(--clr-text)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

@@ -50,12 +50,12 @@ export default function Login() {
               width: 54,
               height: 54,
               borderRadius: 'var(--radius-md)',
-              background: 'var(--grad-danger)',
+              background: 'var(--clr-danger)',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '1.8rem',
-              boxShadow: 'var(--shadow-glow-danger)',
+              boxShadow: 'none',
               marginBottom: 'var(--space-sm)',
             }}
           >

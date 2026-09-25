@@ -44,7 +44,7 @@ export default function Profile() {
                 width: 60,
                 height: 60,
                 borderRadius: '50%',
-                background: 'var(--grad-primary)',
+                background: 'var(--clr-text)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

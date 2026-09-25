@@ -45,8 +45,8 @@ export default function Sidebar() {
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">🚑</div>
         <div className="sidebar-logo-text">
-          Emergency Corridor
-          <small>Smart City EOC Dashboard</small>
+          Traffic Management
+          <small>Command Center</small>
         </div>
       </div>
 

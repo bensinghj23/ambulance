@@ -68,7 +68,6 @@ export default function TrafficMap({ height = '500px' }) {
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
             font-size: 14px;
-            ${isEmergency ? 'animation: pulse-glow 1s infinite;' : ''}
             box-shadow: 0 0 12px ${color}40;
           ">🚦</div>
         `,
