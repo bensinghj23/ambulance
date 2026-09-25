@@ -1,0 +1,12 @@
+{
+  "name": "ambulance-emergency-corridor-system",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Dynamic Lane Assignment for Emergency Vehicles — Smart City Dashboard & Traffic Management System",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "install:all": "npm --prefix frontend install && npm --prefix functions install"
+  }
+}
