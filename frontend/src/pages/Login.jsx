@@ -126,7 +126,38 @@ export default function Login() {
           </button>
         </form>
 
-        <div style={{ marginTop: 'var(--space-lg)', textAlign: 'center', fontSize: '0.8rem', color: 'var(--clr-text-muted)' }}>
+        {/* Quick Demo Access */}
+        <div style={{ marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)', borderTop: '1px solid var(--clr-border-muted, rgba(255,255,255,0.1))' }}>
+          <p style={{ fontSize: '0.75rem', textAlign: 'center', color: 'var(--clr-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Instant Demo Access
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '6px 10px', justifyContent: 'center' }}
+              onClick={async () => {
+                await login('operator@smartcity.gov', 'password123');
+                navigate('/dashboard');
+              }}
+            >
+              👮 Demo Operator
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '6px 10px', justifyContent: 'center' }}
+              onClick={async () => {
+                await login('admin@smartcity.gov', 'password123');
+                navigate('/dashboard');
+              }}
+            >
+              🛡️ Demo Admin
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 'var(--space-md)', textAlign: 'center', fontSize: '0.8rem', color: 'var(--clr-text-muted)' }}>
           Don't have an operator account?{' '}
           <Link to="/register" style={{ color: 'var(--clr-primary)', fontWeight: 600 }}>
             Register Operator
